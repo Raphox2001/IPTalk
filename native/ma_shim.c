@@ -177,7 +177,7 @@ int ipt_stream_open(ipt_ctx* ctx, int capture, int device_index, ma_uint32 perio
     cfg.wasapi.usage = ma_wasapi_usage_pro_audio;
 
     cfg.pulse.pStreamNameCapture = "IPTalk Mikrofon";
-    cfg.pulse.pStreamNamePlayback = "IPTalk Kumpel";
+    cfg.pulse.pStreamNamePlayback = "IPTalk Gegenstelle";
 
     r = ma_device_init(&ctx->context, &cfg, &s->device);
     if (r != MA_SUCCESS) {

@@ -59,6 +59,9 @@ pub struct Config {
     pub mic_gain_db: f32,
     pub out_gain_db: f32,
     pub ptt_key: Option<PttKey>,
+
+    /// Beim Start nach einer neuen Version suchen.
+    pub check_updates: bool,
 }
 
 impl Default for Config {
@@ -82,6 +85,7 @@ impl Default for Config {
             mic_gain_db: 0.0,
             out_gain_db: 0.0,
             ptt_key: None,
+            check_updates: true,
         }
     }
 }
@@ -97,7 +101,7 @@ impl Config {
     pub fn audio_params(&self) -> AudioParams {
         match self.profile {
             // Geteilter Low-Latency-Modus (WASAPI IAudioClient3 bzw. kleines PipeWire-Quantum).
-            // Der Kopfhörer bleibt immer geteilt, sonst hört man den Spielsound nicht mehr.
+            // Der Kopfhörer bleibt immer geteilt, sonst wären andere Anwendungen (z. B. Spiele) auf dem Gerät nicht mehr hörbar.
             Profile::Ultra => AudioParams { period: 64, exclusive_capture: false, exclusive_playback: false },
             Profile::Stable => AudioParams { period: 256, exclusive_capture: false, exclusive_playback: false },
             Profile::Manual => AudioParams {

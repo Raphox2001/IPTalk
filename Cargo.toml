@@ -1,6 +1,6 @@
 [package]
 name = "iptalk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Sprachverbindung mit minimaler Latenz, direkt von IP zu IP"
 license = "MIT"
@@ -15,6 +15,8 @@ eframe = "0.31"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 dirs = "5"
+# HTTPS über rustls: keine OpenSSL-Abhängigkeit unter Linux.
+ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

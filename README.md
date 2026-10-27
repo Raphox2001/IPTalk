@@ -1,16 +1,18 @@
 # IPTalk
 
-**Sprachverbindung mit minimaler Latenz – direkt von PC zu PC im Heimnetz.**
+**Sprachverbindung mit minimaler Latenz – direkt von Rechner zu Rechner im lokalen Netzwerk.**
 
-IPTalk ist für genau einen Zweck gebaut: Zwei Leute sitzen nebeneinander, zocken mit Kopfhörern und wollen sich trotzdem hören, ohne die Verzögerung von Discord und ohne die vielen Optionen von SonoBus. IPTalk läuft unter **Windows** und **Linux**. Es braucht keinen Server und kein Konto, nur zwei PCs im selben Netzwerk.
+IPTalk verbindet zwei Rechner im selben Netzwerk für Sprachkommunikation mit möglichst geringer Verzögerung. Gedacht ist es für Situationen, in denen sich zwei Personen am selben Ort mit geschlossenen Kopfhörern nicht direkt hören, etwa beim gemeinsamen Spielen. Herkömmliche Sprachdienste wie Discord sind dafür zu träge.
+
+IPTalk läuft unter **Windows** und **Linux**. Es braucht keinen Server, kein Benutzerkonto und keine Installation.
 
 | | typische Latenz (Mund → Ohr) |
 |---|---|
-| Discord | 60 – 150 ms |
-| IPTalk (LAN-Kabel, Onboard-Soundkarte, Windows) | **≈ 15 – 17 ms** gemessen |
-| IPTalk (gute USB-Soundkarte / Linux mit kleinem Quantum) | ≈ 8 – 12 ms |
+| Discord und vergleichbare Dienste | 60 – 150 ms |
+| IPTalk (LAN-Kabel, Onboard-Soundkarte, Windows) | **≈ 15 – 17 ms** (gemessen) |
+| IPTalk (USB-Audiogerät bzw. Linux mit kleinem Quantum) | ≈ 8 – 12 ms |
 
-Unter etwa 20 ms nimmt man die Verzögerung praktisch nicht mehr wahr.
+Verzögerungen unter etwa 20 ms werden im Gespräch praktisch nicht mehr wahrgenommen.
 
 ---
 
@@ -20,89 +22,92 @@ Unter etwa 20 ms nimmt man die Verzögerung praktisch nicht mehr wahr.
 2. [Windows](#2-windows)
 3. [Linux](#3-linux)
 4. [Bedienung](#4-bedienung)
-5. [So niedrig wie möglich: Latenz-Tipps](#5-so-niedrig-wie-möglich-latenz-tipps)
-6. [Fehlerbehebung](#6-fehlerbehebung)
-7. [Selbst bauen](#7-selbst-bauen)
-8. [Wie es funktioniert](#8-wie-es-funktioniert)
+5. [Updates](#5-updates)
+6. [Latenz weiter reduzieren](#6-latenz-weiter-reduzieren)
+7. [Fehlerbehebung](#7-fehlerbehebung)
+8. [Aus dem Quellcode bauen](#8-aus-dem-quellcode-bauen)
+9. [Technischer Hintergrund](#9-technischer-hintergrund)
 
 ---
 
 ## 1. Schnellstart
 
-1. Lade unter **[Releases](../../releases)** die passende Datei herunter:
+1. Laden Sie unter **[Releases](https://github.com/Raphox2001/IPTalk/releases/latest)** die passende Datei herunter:
    - Windows: `iptalk-windows-x64.exe`
    - Linux: `iptalk-linux-x64`
-2. Starte IPTalk auf **beiden** PCs.
-3. Nach ein paar Sekunden erscheint der andere PC unter **„Im Netzwerk gefunden“**. Ein Klick darauf verbindet euch. Alternativ gibst du die IP des anderen ein und klickst auf **Verbinden**.
-4. Fertig. Die Gegenseite nimmt automatisch an.
+2. Starten Sie IPTalk auf **beiden** Rechnern.
+3. Nach wenigen Sekunden erscheint der andere Rechner unter **„Im lokalen Netzwerk gefunden“**. Ein Klick darauf stellt die Verbindung her. Alternativ geben Sie die IP-Adresse der Gegenstelle ein und klicken auf **Verbinden**.
+4. Die Gegenstelle nimmt die Verbindung automatisch an.
 
-> Die IP-Adresse findest du unter Windows mit `ipconfig` (Zeile „IPv4-Adresse“) und unter Linux mit `ip -4 addr` oder `hostname -I`.
+> Die eigene IP-Adresse ermitteln Sie unter Windows mit `ipconfig` (Zeile „IPv4-Adresse“) und unter Linux mit `hostname -I`.
 
 ---
 
 ## 2. Windows
 
-### Starten
-`iptalk-windows-x64.exe` einfach per Doppelklick starten, eine Installation ist nicht nötig. Die Einstellungen landen in `%APPDATA%\IPTalk\config.toml`.
+### Start
+Starten Sie `iptalk-windows-x64.exe` per Doppelklick. Eine Installation ist nicht erforderlich. Die Einstellungen werden in `%APPDATA%\IPTalk\config.toml` gespeichert.
 
-> Beim ersten Start warnt Windows SmartScreen eventuell vor einer „unbekannten App“. Klicke auf **Weitere Informationen → Trotzdem ausführen**. Das liegt nur daran, dass die Datei nicht signiert ist.
+> Beim ersten Start zeigt Windows SmartScreen unter Umständen den Hinweis „Der Computer wurde durch Windows geschützt“. Wählen Sie dann **Weitere Informationen → Trotzdem ausführen**. Der Hinweis erscheint, weil die Datei nicht digital signiert ist.
 
 ### Firewall
-Beim ersten Start fragt die Windows-Firewall nach. Setze den Haken bei **„Private Netzwerke“** und klicke auf **Zugriff zulassen**.
+Beim ersten Start fragt die Windows-Firewall nach einer Freigabe. Aktivieren Sie **„Private Netzwerke“** und bestätigen Sie mit **Zugriff zulassen**.
 
-Falls die Frage nicht kam oder du sie weggeklickt hast, kannst du die Regel in einer **PowerShell als Administrator** von Hand anlegen:
+Falls die Abfrage nicht erschienen ist, legen Sie die Regel in einer **PowerShell mit Administratorrechten** an:
 
 ```powershell
 New-NetFirewallRule -DisplayName "IPTalk" -Direction Inbound -Protocol UDP -LocalPort 47800 -Action Allow -Profile Private
 ```
 
-Außerdem muss dein Netzwerk in Windows als **„Privat“** eingestuft sein: *Einstellungen → Netzwerk und Internet → Ethernet → Netzwerkprofiltyp: Privates Netzwerk*.
+Das Netzwerk muss in Windows außerdem als **privat** eingestuft sein: *Einstellungen → Netzwerk und Internet → Ethernet → Netzwerkprofiltyp: Privates Netzwerk*.
 
-### Gerät auf 48 kHz stellen (empfohlen)
-IPTalk arbeitet intern mit 48 kHz. Steht dein Headset unter Windows auf 44,1 kHz, muss zusätzlich umgerechnet werden. Das kostet etwas Latenz.
-*Systemsteuerung → Sound → Aufnahme → Mikrofon → Eigenschaften → Erweitert → „2 Kanal, 24 Bit, 48000 Hz“*. Für den Kopfhörer im Tab *Wiedergabe* genauso.
+### Abtastrate 48 kHz (empfohlen)
+IPTalk arbeitet intern mit 48 kHz. Ist ein Gerät in Windows auf 44,1 kHz eingestellt, muss zusätzlich umgerechnet werden, was etwas Latenz kostet. Stellen Sie das Format so um: *Systemsteuerung → Sound → Aufnahme → Mikrofon → Eigenschaften → Erweitert → „2 Kanal, 24 Bit, 48000 Hz“*. Für das Wiedergabegerät gehen Sie im Register *Wiedergabe* genauso vor.
 
 ---
 
 ## 3. Linux
 
-IPTalk ist ein einzelnes Programm. PulseAudio, PipeWire, JACK und ALSA lädt es erst zur Laufzeit, deshalb braucht es keine Extra-Pakete zum Starten.
+IPTalk wird als einzelne ausführbare Datei ausgeliefert. Die Audiosysteme PulseAudio, PipeWire, JACK und ALSA werden erst zur Laufzeit geladen.
 
-### Starten
+### Start
 ```bash
 chmod +x iptalk-linux-x64
+```
+```bash
 ./iptalk-linux-x64
 ```
 
-Optional kannst du es systemweit installieren:
+Optional für alle Benutzer installieren:
 ```bash
 sudo install -m 755 iptalk-linux-x64 /usr/local/bin/iptalk
 ```
+Bei einer systemweiten Installation kann IPTalk sich nicht selbst aktualisieren (siehe [Updates](#5-updates)).
 
-Die Einstellungen landen in `~/.config/iptalk/config.toml`.
+Die Einstellungen werden in `~/.config/iptalk/config.toml` gespeichert.
 
 ### Benötigte Bibliotheken
-Auf normalen Desktop-Systemen ist schon alles vorhanden. Falls IPTalk nicht startet:
+Auf üblichen Desktop-Systemen sind alle Bibliotheken bereits vorhanden. Falls IPTalk nicht startet, installieren Sie diese Pakete:
 
 | Distribution | Befehl |
 |---|---|
-| Ubuntu / Debian / Mint / Pop!_OS | `sudo apt install libpulse0 libasound2 libgl1 libxkbcommon0` |
+| Ubuntu / Debian / Linux Mint / Pop!_OS | `sudo apt install libpulse0 libasound2 libgl1 libxkbcommon0` |
 | Fedora | `sudo dnf install pulseaudio-libs alsa-lib mesa-libGL libxkbcommon` |
 | Arch / Manjaro / CachyOS | `sudo pacman -S libpulse alsa-lib libglvnd libxkbcommon` |
 
-Ob PipeWire läuft, zeigt `pactl info | grep "Server Name"`. Die Ausgabe sollte etwa „PulseAudio (on PipeWire …)“ lauten. Aktuelle Distributionen nutzen fast alle PipeWire.
+Ob PipeWire aktiv ist, prüfen Sie mit `pactl info | grep "Server Name"`. Die Ausgabe sollte etwa „PulseAudio (on PipeWire …)“ lauten.
 
 ### Push-to-Talk unter Linux
-Damit die PTT-Taste **auch im Spiel** (X11 und Wayland) erkannt wird, liest IPTalk Tastatur und Maus direkt aus `/dev/input`. Dafür musst du dich einmalig der Gruppe `input` hinzufügen:
+Damit die Push-to-Talk-Taste auch dann erkannt wird, wenn ein anderes Programm im Vordergrund ist, liest IPTalk Tastatur und Maus direkt aus `/dev/input`. Das funktioniert unter X11 und Wayland. Dafür muss der Benutzer einmalig zur Gruppe `input` hinzugefügt werden:
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-Danach **ab- und wieder anmelden** oder neu starten. Ohne diese Berechtigung funktionieren alle anderen Sprechmodi trotzdem.
+Danach müssen Sie sich ab- und wieder anmelden. Ohne diese Berechtigung stehen alle anderen Sprechmodi weiterhin zur Verfügung.
 
 ### Firewall
-Die meisten Desktop-Distributionen haben keine aktive Firewall. Falls doch:
+Auf den meisten Desktop-Distributionen ist keine Firewall aktiv. Falls doch:
 
 ```bash
 # Ubuntu (ufw)
@@ -118,8 +123,8 @@ sudo firewall-cmd --permanent --add-port=47800/udp
 sudo firewall-cmd --reload
 ```
 
-### Niedrigste Latenz unter Linux: JACK-Schnittstelle von PipeWire
-Unter *Audio-Einstellungen → Audio-System* **„JACK / PipeWire-JACK“** wählen. Dafür muss das passende Paket installiert sein:
+### Geringste Latenz: JACK-Schnittstelle von PipeWire
+Wählen Sie unter *Audio-Einstellungen → Audio-System* den Eintrag **„JACK / PipeWire-JACK“**. Dafür muss das passende Paket installiert sein:
 
 | Distribution | Paket |
 |---|---|
@@ -127,9 +132,9 @@ Unter *Audio-Einstellungen → Audio-System* **„JACK / PipeWire-JACK“** wäh
 | Fedora | `pipewire-jack-audio-connection-kit` |
 | Arch | `pipewire-jack` |
 
-IPTalk setzt beim Start selbst `PIPEWIRE_LATENCY` (z. B. `64/48000` im Profil „Ultra“). Bei JACK wählt IPTalk die Geräte nicht selbst, sie folgen den Standardgeräten von PipeWire. Umstellen kannst du sie mit `pavucontrol`, `qpwgraph` oder den Systemeinstellungen.
+IPTalk setzt beim Start die Variable `PIPEWIRE_LATENCY` (im Profil „Ultra“ z. B. `64/48000`). Mit JACK verwendet IPTalk die Standardgeräte von PipeWire. Diese ändern Sie mit `pavucontrol`, `qpwgraph` oder in den Systemeinstellungen.
 
-Damit der Audio-Thread Echtzeit-Priorität bekommt, sollte **rtkit** laufen. Das ist bei den meisten Distributionen Standard:
+Damit der Audio-Thread Echtzeitpriorität erhält, sollte der Dienst **rtkit** laufen. Bei den meisten Distributionen ist das Standard:
 
 ```bash
 systemctl status rtkit-daemon
@@ -140,152 +145,179 @@ systemctl status rtkit-daemon
 ## 4. Bedienung
 
 ### Verbindung
-- **IP des Kumpels** eintragen und auf **Verbinden** klicken, oder einen Eintrag aus **„Im Netzwerk gefunden“** anklicken.
-- **Anrufe automatisch annehmen**: Ruft dich jemand an, während du nicht verbunden bist, wird sofort verbunden. Es reicht also, wenn **einer** von euch auf Verbinden klickt.
-- **Testmodus**: Deine eigene Stimme läuft über den kompletten Netzwerkweg zu dir zurück. Damit kannst du allein Geräte, Rauschsperre und Lautstärke einstellen.
-- Port: **47800/UDP**. Ändern lässt er sich per `--port` oder in der `config.toml`.
+- **IP-Adresse der Gegenstelle** eingeben und auf **Verbinden** klicken, oder einen Eintrag unter **„Im lokalen Netzwerk gefunden“** auswählen.
+- **Eingehende Verbindungen automatisch annehmen**: Ist dies aktiviert, genügt es, wenn eine Seite die Verbindung herstellt.
+- **Testmodus**: Die eigene Stimme durchläuft den vollständigen Netzwerkpfad und wird lokal zurückgespielt. So lassen sich Geräte, Rauschsperre und Pegel ohne Gegenstelle einrichten.
+- Port: **47800/UDP**. Ändern lässt er sich mit `--port` oder in der `config.toml`.
 
 ### Sprechmodi
-| Modus | Wann sinnvoll |
+| Modus | Einsatzzweck |
 |---|---|
-| **Immer offen** | Ruhige Umgebung, gutes Headset |
-| **Rauschsperre** | Standard. Gesendet wird nur, wenn du sprichst. Stell die **gelbe Linie** in der Pegelanzeige knapp über das Grundrauschen (Lüfter, Tastatur). |
-| **Push-to-Talk** | Klick auf **„Taste festlegen“**, dann die gewünschte Taste oder Maustaste drücken (z. B. Maus-Seitentaste). Sie funktioniert global, auch im Spiel. |
+| **Immer offen** | Ruhige Umgebung, gutes Mikrofon |
+| **Rauschsperre** | Standard. Gesendet wird nur, solange gesprochen wird. Stellen Sie die Schwelle (gelbe Markierung in der Pegelanzeige) knapp oberhalb des Grundrauschens ein. |
+| **Push-to-Talk** | Gesendet wird nur bei gedrückter Taste. Klicken Sie auf **„Taste festlegen“** und drücken Sie anschließend die gewünschte Taste oder Maustaste. Die Taste wirkt global, also auch in anderen Anwendungen. |
 
-Dazu gibt es **Mikro-Verstärkung**, **Lautstärke Kumpel** und je einen **Stumm-Knopf**.
+Zusätzlich gibt es Regler für **Mikrofon-Verstärkung** und **Lautstärke Gegenstelle** sowie je eine Stummschaltung.
 
-### Latenz-Anzeige
-- **Deine Stimme beim Kumpel** / **Kumpels Stimme bei dir**: wird **live gemessen**. IPTalk misst die Zeit vom Mikrofon-Callback über das Netz und den Jitterpuffer bis zum Kopfhörer-Callback der Gegenseite und addiert die Gerätepuffer. Grün heißt bis 12 ms, gelb bis 25 ms.
-- **Jitterpuffer**: Er gleicht Schwankungen im Netz und die minimal unterschiedlichen Takte der beiden Soundkarten aus. Im Auto-Modus stellt er sich selbst so klein wie möglich ein.
-- **Unterläufe**: Aussetzer im Ton. Treten sie häufiger auf, im Profil „Stabil“ wählen oder die Puffergröße erhöhen.
+### Latenzanzeige
+- **Senderichtung** bzw. **Empfangsrichtung**: Die tatsächliche Verzögerung in beiden Richtungen, **laufend gemessen**. Gemessen wird vom Aufnahme-Callback über das Netzwerk und den Jitterpuffer bis zum Wiedergabe-Callback der Gegenseite, zuzüglich der Gerätepuffer. Grün steht für höchstens 12 ms, gelb für höchstens 25 ms.
+- **Jitterpuffer**: Er gleicht Schwankungen im Netzwerk und die geringfügig unterschiedlichen Takte der beiden Soundkarten aus. Im Automatikmodus stellt er sich auf den kleinstmöglichen Wert ein.
+- **Unterläufe**: Kurze Aussetzer in der Wiedergabe. Treten sie häufig auf, wählen Sie das Profil „Stabil“.
 
-### Audio-Einstellungen (aufklappen)
-- **Mikrofon / Kopfhörer**: Geräte wählen.
-- **Latenz-Profil**
-  - **Ultra**: kleinste Puffer (64 Frames angefordert). Standard.
-  - **Stabil**: 256 Frames, falls es knackst.
-  - **Manuell**: Puffergröße selbst wählen. Unter Windows zusätzlich *WASAPI Exclusive* für das Mikrofon. IPTalk prüft dabei automatisch, ob der Treiber das korrekt kann, und fällt sonst auf den geteilten Modus zurück.
-- Den **Kopfhörer exklusiv** zu öffnen ist möglich, aber dann ist der **Spielsound auf diesem Gerät stumm**. Nur nutzen, wenn das Spiel über ein anderes Gerät läuft.
-
----
-
-## 5. So niedrig wie möglich: Latenz-Tipps
-
-1. **LAN-Kabel statt WLAN.** WLAN schwankt stark, der Jitterpuffer muss dann größer werden.
-2. **Keine Bluetooth-Kopfhörer.** Bluetooth allein kostet 100 bis 200 ms.
-3. **Windows: Mikrofon und Kopfhörer auf 48 kHz stellen** (siehe oben).
-4. **Profil „Ultra“** verwenden. Knackst es, auf „Stabil“ wechseln oder unter „Manuell“ 128 Frames probieren.
-5. **Linux: „JACK / PipeWire-JACK“** als Audio-System wählen.
-6. Eine **USB-Soundkarte oder ein USB-Headset** hat oft kleinere minimale Puffer als Onboard-Sound.
-7. Im Fenster unter *Audio-Einstellungen* siehst du, welche Puffer tatsächlich ausgehandelt wurden, z. B. „Mikrofon: 139 Frames × 2 @ 48000 Hz = 2.9 ms“.
+### Audio-Einstellungen
+- **Mikrofon / Kopfhörer**: Wahl der Geräte.
+- **Latenz-Profil**:
+  - **Ultra** (Standard): kleinste Puffer (64 Frames angefordert).
+  - **Stabil**: 256 Frames, für Systeme mit Aussetzern.
+  - **Manuell**: frei wählbare Puffergröße. Unter Windows zusätzlich der *WASAPI-Exklusivmodus* für das Mikrofon. IPTalk prüft dabei automatisch, ob der Treiber korrekt getaktete Daten liefert, und wechselt andernfalls in den geteilten Modus.
+- Der **Kopfhörer im Exklusivmodus** ist möglich. Andere Anwendungen sind dann jedoch auf diesem Gerät nicht mehr hörbar.
 
 ---
 
-## 6. Fehlerbehebung
+## 5. Updates
+
+IPTalk prüft beim Start, ob auf GitHub eine neuere Version veröffentlicht wurde. Ist das der Fall, erscheint oben im Fenster ein Hinweis:
+
+1. **Jetzt aktualisieren** lädt die neue Version herunter und ersetzt die vorhandene Programmdatei.
+2. **Jetzt neu starten** beendet IPTalk und startet die neue Version. Eine bestehende Verbindung wird dabei kurz unterbrochen. Die Einstellungen bleiben erhalten.
+
+In der Fußzeile lässt sich die Suche mit **„Nach Updates suchen“** jederzeit von Hand auslösen. Mit **„Beim Start prüfen“** schalten Sie die automatische Prüfung ab oder wieder ein.
+
+Über die Kommandozeile funktioniert das genauso:
+```bash
+iptalk --update
+```
+
+**Voraussetzung:** Der Benutzer braucht Schreibrechte im Ordner der Programmdatei. Liegt IPTalk in einem geschützten Verzeichnis (z. B. `C:\Program Files` oder `/usr/local/bin`), meldet IPTalk das. Laden Sie die neue Version dann manuell von der [Release-Seite](https://github.com/Raphox2001/IPTalk/releases/latest).
+
+---
+
+## 6. Latenz weiter reduzieren
+
+1. **Kabelverbindung statt WLAN.** WLAN schwankt stärker und erfordert einen größeren Jitterpuffer.
+2. **Keine Bluetooth-Kopfhörer.** Bluetooth allein verursacht 100 bis 200 ms Verzögerung.
+3. **Windows:** Mikrofon und Kopfhörer auf 48 kHz einstellen (siehe oben).
+4. **Profil „Ultra“** verwenden. Bei Aussetzern unter „Manuell“ 128 Frames versuchen oder „Stabil“ wählen.
+5. **Linux:** Als Audio-System **„JACK / PipeWire-JACK“** wählen.
+6. **USB-Audiogeräte** lassen oft kleinere Puffer zu als Onboard-Soundkarten.
+7. Unter *Audio-Einstellungen* zeigt IPTalk die tatsächlich ausgehandelten Puffer an, z. B. „Mikrofon: 139 Frames × 2 @ 48000 Hz = 2.9 ms“.
+
+---
+
+## 7. Fehlerbehebung
 
 | Problem | Lösung |
 |---|---|
-| **„Keine Antwort von …“** | Läuft IPTalk auf dem anderen PC? Firewall-Regel prüfen (siehe [Windows](#firewall) / [Linux](#firewall-1)). Ist die IP richtig? Beide im selben Netz? |
-| Der andere PC erscheint nicht unter „Im Netzwerk gefunden“ | Manche Router blockieren Broadcasts. Dann einfach die IP von Hand eingeben. |
-| Kein Ton | Richtige Geräte gewählt? **Testmodus** probieren. Pegelanzeige unter „Sprechen“ ansehen. Bei Rauschsperre die Schwelle eventuell zu hoch. |
-| Knacksen / Aussetzer | Profil „Stabil“ wählen, oder „Manuell“ mit 128 bzw. 256 Frames. Bei WLAN den Jitterpuffer auf manuell 5 bis 10 ms stellen. |
-| Push-to-Talk reagiert nicht (Linux) | `sudo usermod -aG input $USER`, danach neu anmelden. Mit `groups` prüfen, ob `input` dabei ist. |
-| Push-to-Talk reagiert nicht (Windows) | Läuft das Spiel als Administrator, muss IPTalk auch als Administrator laufen. |
-| „Port 47800 konnte nicht geöffnet werden“ | IPTalk läuft schon (z. B. im Hintergrund). Sonst `--port 47801` verwenden und die Gegenseite mit `IP:47801` verbinden. |
-| Spielsound weg | Unter „Manuell“ ist „Kopfhörer exklusiv“ aktiv. Ausschalten. |
-| Linux: Fenster startet nicht | Bibliotheken aus [Abschnitt 3](#benötigte-bibliotheken) installieren. Im Terminal starten und die Fehlermeldung ansehen. |
+| **„Keine Antwort von …“** | Prüfen Sie, ob IPTalk auf der Gegenstelle läuft, ob die Firewall-Regel besteht (siehe [Windows](#firewall) / [Linux](#firewall-1)) und ob beide Rechner im selben Netzwerk sind. |
+| Gegenstelle erscheint nicht unter „Im lokalen Netzwerk gefunden“ | Manche Router blockieren Broadcasts. Geben Sie dann die IP-Adresse von Hand ein. |
+| Keine Audioübertragung | Gerätewahl prüfen und den Testmodus verwenden. Beobachten Sie die Pegelanzeige unter „Sprechen“. Bei Rauschsperre ist die Schwelle möglicherweise zu hoch. |
+| Knacken oder Aussetzer | Profil „Stabil“ wählen, oder unter „Manuell“ 128 bzw. 256 Frames einstellen. Im WLAN den Jitterpuffer manuell auf 5 bis 10 ms setzen. |
+| Push-to-Talk reagiert nicht (Linux) | `sudo usermod -aG input $USER` ausführen und neu anmelden. Mit `groups` prüfen, ob `input` aufgeführt ist. |
+| Push-to-Talk reagiert nicht (Windows) | Läuft die andere Anwendung mit Administratorrechten, muss auch IPTalk mit Administratorrechten laufen. |
+| „Port 47800 konnte nicht geöffnet werden“ | IPTalk läuft bereits. Alternativ mit `--port 47801` starten und auf der Gegenstelle `IP:47801` angeben. |
+| Andere Anwendungen auf dem Kopfhörer stumm | Unter „Manuell“ die Option „Kopfhörer exklusiv“ deaktivieren. |
+| Linux: Fenster öffnet sich nicht | Bibliotheken aus [Abschnitt 3](#benötigte-bibliotheken) installieren und IPTalk im Terminal starten, um die Fehlermeldung zu sehen. |
 
 ### Diagnose über die Kommandozeile
 ```bash
 iptalk --list-devices
 ```
-listet alle Audio-Systeme und Geräte auf.
+Listet alle verfügbaren Audiosysteme und Geräte auf.
 
 ```bash
 iptalk --selftest
 ```
-öffnet die Geräte ohne Fenster, schickt die eigene Stimme über 127.0.0.1 zurück und gibt jede Sekunde Latenz, Puffer und Aussetzer aus. Die Ausgabe ist dabei stumm, damit es über Lautsprecher nicht rückkoppelt.
+Öffnet die Geräte ohne Fenster, spielt die eigene Stimme über 127.0.0.1 zurück und gibt jede Sekunde Latenz, Pufferstand und Aussetzer aus. Die Wiedergabe ist dabei stummgeschaltet, damit es über Lautsprecher keine Rückkopplung gibt.
 
 ```bash
 iptalk --selftest --connect 192.168.1.20 --seconds 30
 ```
-macht dasselbe gegen den PC deines Kumpels. Dort muss IPTalk laufen.
+Führt denselben Test gegen eine Gegenstelle aus, auf der IPTalk laufen muss.
 
 Alle Optionen zeigt `iptalk --help`.
 
 ---
 
-## 7. Selbst bauen
+## 8. Aus dem Quellcode bauen
 
-Voraussetzung ist **Rust** (stabile Version), das du über [rustup.rs](https://rustup.rs) installierst.
+Voraussetzung ist **Rust** (stabile Version), das Sie über [rustup.rs](https://rustup.rs) installieren.
 
 ### Windows
-1. Rust installieren: [rustup-init.exe](https://rustup.rs)
-2. Die **Visual Studio Build Tools** mit „Desktopentwicklung mit C++“ installieren. rustup bietet das an.
-3. Bauen:
+1. Rust über [rustup-init.exe](https://rustup.rs) installieren.
+2. Die **Visual Studio Build Tools** mit der Komponente „Desktopentwicklung mit C++“ installieren. rustup bietet das an.
+3. Repository klonen und bauen:
    ```powershell
    git clone https://github.com/Raphox2001/IPTalk.git
    cd IPTalk
    cargo build --release
    ```
-4. Das Programm liegt unter `target\release\iptalk.exe`.
+4. Die Programmdatei liegt danach unter `target\release\iptalk.exe`.
 
 ### Linux
-1. Compiler und Werkzeuge installieren (Ubuntu/Debian; bei Fedora `gcc`, bei Arch `base-devel`):
+1. Compiler und Werkzeuge installieren. Unter Ubuntu/Debian:
    ```bash
    sudo apt install build-essential git curl
    ```
+   Unter Fedora heißt das Paket `gcc`, unter Arch `base-devel`.
 2. Rust installieren:
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
-3. Repository holen und bauen:
+3. Repository klonen:
    ```bash
    git clone https://github.com/Raphox2001/IPTalk.git
    ```
+4. Bauen:
    ```bash
    cd IPTalk && cargo build --release
    ```
-4. Das Programm liegt unter `target/release/iptalk`.
+5. Die Programmdatei liegt danach unter `target/release/iptalk`.
 
-Header-Pakete wie `libpulse-dev` oder `libasound2-dev` werden **nicht** gebraucht.
+Entwicklerpakete wie `libpulse-dev` oder `libasound2-dev` sind **nicht** erforderlich. Die Tests starten Sie mit `cargo test --release`.
 
-Die Tests startest du mit `cargo test --release`.
-
-Bei jedem Push baut GitHub Actions beide Versionen. Bei einem Tag `v*` (z. B. `git tag v0.1.0 && git push --tags`) entsteht automatisch ein Release mit beiden Dateien.
+### Veröffentlichung
+GitHub Actions baut bei jedem Push beide Versionen. Ein Tag der Form `v*` (z. B. `v0.3.0`) erzeugt automatisch ein Release mit beiden Programmdateien, das die Update-Funktion dann anbietet. Die Versionsnummer in `Cargo.toml` muss zum Tag passen.
 
 ---
 
-## 8. Wie es funktioniert
+## 9. Technischer Hintergrund
 
-Alles ist auf möglichst wenig Verzögerung ausgelegt:
+Die gesamte Signalkette ist auf möglichst geringe Verzögerung ausgelegt:
 
-- **Kein Codec.** Die Stimme geht unkomprimiert über die Leitung (48 kHz, mono, 16 Bit, also 768 kbit/s). Für ein Heimnetz ist das nichts, und es spart die 5 bis 25 ms, die ein Codec wie Opus für Puffern und Vorausschau braucht.
-- **UDP direkt von PC zu PC**, ohne Server und ohne TCP-Wartezeiten. Jeder Audio-Callback wird sofort als eigenes Paket verschickt (≤ 2,5 ms Audio pro Paket).
-- **miniaudio** als Audio-Schicht:
+- **Kein Codec.** Audio wird unkomprimiert übertragen (48 kHz, mono, 16 Bit, also 768 kbit/s). Für ein lokales Netzwerk ist diese Datenrate unerheblich. Ein Codec wie Opus würde 5 bis 25 ms für Framing und Lookahead hinzufügen.
+- **UDP direkt zwischen den Rechnern**, ohne Server und ohne TCP-Retransmissionen. Jeder Audio-Callback wird sofort als eigenes Paket versendet (höchstens 2,5 ms Audio pro Paket).
+- **miniaudio** als Audioschicht:
   - Windows: WASAPI im Low-Latency-Modus (IAudioClient3, MMCSS „Pro Audio“), optional Exclusive.
   - Linux: PulseAudio/PipeWire, JACK oder ALSA mit kleinem Quantum.
-- **Adaptiver Jitterpuffer mit Drift-Ausgleich.** Zwei Soundkarten laufen nie exakt gleich schnell; ±100 ppm sind normal und ergäben ohne Ausgleich eine stündlich wachsende Verzögerung. Ein PI-Regler hält deshalb den *minimalen* Füllstand des Puffers auf einer kleinen Reserve. Bei Bedarf lässt er pro Audioblock ein einzelnes Sample weg oder ergänzt eines, per Interpolation über den Block, also unhörbar. Die Reserve wächst automatisch, wenn Aussetzer auftreten, und schrumpft wieder, wenn alles stabil läuft.
-- **Echte Latenzmessung.** Der Empfänger meldet 10-mal pro Sekunde, welches Sample (Zeitstempel des Absenders) er gerade abspielt. Daraus ergibt sich ohne Uhrensynchronisation die tatsächliche Verzögerung.
+- **Adaptiver Jitterpuffer mit Driftausgleich.** Zwei Soundkarten laufen nie exakt gleich schnell; ±100 ppm sind üblich und würden ohne Ausgleich zu stetig wachsender Verzögerung führen. Ein PI-Regler hält den minimalen Füllstand des Puffers auf einer kleinen Reserve. Bei Bedarf lässt er pro Audioblock ein Sample aus oder fügt eines ein, durch Interpolation über den Block praktisch unhörbar. Treten Aussetzer auf, vergrößert sich die Reserve automatisch und baut sich bei stabilem Betrieb wieder ab.
+- **Echte Latenzmessung.** Der Empfänger meldet zehnmal pro Sekunde, welches Sample (mit dem Zeitstempel des Senders) gerade abgespielt wird. Daraus ergibt sich ohne Uhrensynchronisation die tatsächliche Verzögerung.
 
 ### Projektstruktur
 ```
-native/miniaudio.h   Audio-Bibliothek (Single Header, v0.11.25)
+native/miniaudio.h   Audiobibliothek (Single Header, v0.11.25)
 native/ma_shim.c     schlanke C-Schnittstelle für Rust
-src/audio.rs         sichere Rust-Hülle um miniaudio
+src/audio.rs         sichere Rust-Kapselung von miniaudio
 src/protocol.rs      UDP-Paketformat
-src/jitter.rs        Jitterpuffer + Drift-Regler (mit Simulationstests)
+src/jitter.rs        Jitterpuffer und Driftregler (mit Simulationstests)
 src/dsp.rs           Verstärkung, Rauschsperre, Push-to-Talk-Logik
-src/engine.rs        Netzwerk-Threads, Verbindungsaufbau, Audio-Geräte
-src/ptt.rs           globale PTT-Taste (Windows: GetAsyncKeyState, Linux: evdev)
-src/ui.rs            Fenster (egui)
-src/main.rs          Start, Kommandozeilen-Optionen, Selbsttest
+src/engine.rs        Netzwerk-Threads, Verbindungsaufbau, Audiogeräte
+src/ptt.rs           globale Push-to-Talk-Taste (Windows: GetAsyncKeyState, Linux: evdev)
+src/update.rs        Aktualisierung über GitHub-Releases
+src/ui.rs            Benutzeroberfläche (egui)
+src/main.rs          Start, Kommandozeilenoptionen, Selbsttest
 ```
 
 ### Protokoll
-UDP-Port 47800. Jedes Paket hat einen 20-Byte-Header (`IPTK`, Version, Typ, Flags, Sequenznummer, Zeitstempel in µs). Die Typen sind: Audio, Hello/HelloAck (Verbindungsaufbau), Discover/Announce (LAN-Suche per Broadcast), Ping/Pong, Played (Latenzmessung), Stats und Bye.
+UDP-Port 47800. Jedes Paket beginnt mit einem 20-Byte-Header: `IPTK`, Version, Typ, Flags, Sequenznummer und Zeitstempel in µs. Paketarten:
+- Audio
+- Hello/HelloAck (Verbindungsaufbau)
+- Discover/Announce (Netzwerksuche per Broadcast)
+- Ping/Pong
+- Played (Latenzmessung)
+- Stats
+- Bye
 
-**Hinweis:** Die Übertragung ist **unverschlüsselt**, gedacht fürs eigene Heimnetz.
+**Hinweis:** Die Übertragung ist **nicht verschlüsselt** und für den Einsatz im eigenen lokalen Netzwerk vorgesehen.
 
 ## Lizenz
-MIT. Siehe [LICENSE](LICENSE). miniaudio steht unter Public Domain bzw. MIT-0.
+MIT, siehe [LICENSE](LICENSE). miniaudio steht unter Public Domain bzw. MIT-0.

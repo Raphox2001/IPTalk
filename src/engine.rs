@@ -86,7 +86,18 @@ fn ema(cell: &F32Cell, v: f32, k: f32) {
 
 impl Shared {
     pub fn new(cfg: &Config, port: u16, ptt: Arc<Ptt>) -> std::io::Result<Arc<Shared>> {
-        let socket = UdpSocket::bind(("0.0.0.0", port))?;
+        // Nach einem Update-Neustart gibt die alte Instanz den Port erst kurz danach frei.
+        let mut tries = 0;
+        let socket = loop {
+            match UdpSocket::bind(("0.0.0.0", port)) {
+                Ok(s) => break s,
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse && tries < 20 => {
+                    tries += 1;
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+                Err(e) => return Err(e),
+            }
+        };
         socket.set_broadcast(true)?;
         socket.set_read_timeout(Some(Duration::from_millis(100)))?;
         let start = Instant::now();
@@ -191,7 +202,7 @@ impl Shared {
     pub fn connect(&self, target: &str) -> Result<SocketAddr, String> {
         let target = target.trim();
         if target.is_empty() {
-            return Err("Bitte die IP-Adresse deines Kumpels eingeben.".into());
+            return Err("Bitte die IP-Adresse der Gegenstelle eingeben.".into());
         }
         let with_port = if target.contains(':') { target.to_string() } else { format!("{target}:{}", self.port) };
         let addr = with_port
@@ -334,7 +345,7 @@ fn recv_loop(sh: Arc<Shared>) {
                 ema(&sh.rtt_ms, rtt, 0.2);
             }
             Kind::Played if is_peer => {
-                // h.ts = Aufnahmezeit (unsere Uhr) des Samples, das der Kumpel gerade abspielt.
+                // h.ts = Aufnahmezeit (unsere Uhr) des Samples, das die Gegenstelle gerade abspielt.
                 let loop_ms = sh.now_us().saturating_sub(h.ts) as f32 / 1000.0;
                 let rtt = sh.rtt_ms.get();
                 let back = if rtt.is_nan() { 0.0 } else { rtt / 2.0 };
@@ -353,7 +364,7 @@ fn recv_loop(sh: Arc<Shared>) {
             }
             Kind::Bye if is_peer => {
                 sh.set_peer(None);
-                *sh.notice.lock().unwrap() = Some("Dein Kumpel hat die Verbindung getrennt.".into());
+                *sh.notice.lock().unwrap() = Some("Die Gegenstelle hat die Verbindung beendet.".into());
             }
             _ => {}
         }

@@ -4,7 +4,7 @@ use crate::audio::SAMPLE_RATE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TalkMode {
-    /// Mikro immer offen.
+    /// Mikrofon immer offen.
     Open,
     /// Immer offen, aber nur senden, wenn der Pegel über der Schwelle liegt.
     Gate,

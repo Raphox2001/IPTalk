@@ -10,6 +10,7 @@ use crate::audio::Backend;
 use crate::config::{Config, Profile};
 use crate::dsp::{gain_to_db, TalkMode};
 use crate::engine::{AudioEngine, Shared};
+use crate::update::{self, Updater};
 
 const GREEN: Color32 = Color32::from_rgb(80, 200, 120);
 const YELLOW: Color32 = Color32::from_rgb(230, 190, 60);
@@ -27,11 +28,18 @@ pub struct App {
     meter_in: f32,
     meter_out: f32,
     message: Option<(String, Color32)>,
+    updater: Updater,
+    /// Die Update-Suche wurde von Hand gestartet → auch „aktuell“/Fehler deutlich anzeigen.
+    manual_update_check: bool,
 }
 
 impl App {
     pub fn new(cfg: Config, shared: Arc<Shared>) -> App {
         let engine = AudioEngine::start(&shared, &cfg, false);
+        let updater = Updater::new();
+        if cfg.check_updates {
+            updater.check_in_background();
+        }
         App {
             peer_input: cfg.last_peer.clone(),
             cfg,
@@ -42,6 +50,8 @@ impl App {
             meter_in: 0.0,
             meter_out: 0.0,
             message: None,
+            updater,
+            manual_update_check: false,
         }
     }
 
@@ -57,7 +67,7 @@ impl App {
             Ok(addr) => {
                 self.cfg.last_peer = target;
                 self.cfg.save();
-                self.message = Some((format!("Rufe {addr} …"), GREY));
+                self.message = Some((format!("Verbindungsaufbau zu {addr} …"), GREY));
             }
             Err(e) => self.message = Some((e, RED)),
         }
@@ -134,7 +144,7 @@ impl eframe::App for App {
                 self.force_shared = true;
                 self.restart_audio();
                 self.message = Some((
-                    format!("Der Treiber liefert im Exklusiv-Modus falsche Daten ({rate:.0} statt 48000 Samples/s). Nutze den geteilten Modus."),
+                    format!("Der Treiber liefert im Exklusiv-Modus falsche Daten ({rate:.0} statt 48000 Samples/s). Es wird der geteilte Modus verwendet."),
                     YELLOW,
                 ));
             }
@@ -143,6 +153,8 @@ impl eframe::App for App {
             self.cfg.ptt_key = Some(key);
             self.cfg.save();
         }
+
+        self.update_panels(ctx);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -163,6 +175,88 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// Hinweisleiste oben (neue Version) und Fußzeile mit Versionsnummer.
+    fn update_panels(&mut self, ctx: &egui::Context) {
+        let state = self.updater.state();
+        let banner = match &state {
+            update::State::Available(_) | update::State::Downloading { .. } | update::State::Installed(_) => true,
+            update::State::Failed(_) => self.manual_update_check,
+            _ => false,
+        };
+        if banner {
+            egui::TopBottomPanel::top("update").show(ctx, |ui| {
+                ui.add_space(4.0);
+                match &state {
+                    update::State::Available(rel) => {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(format!(
+                                    "Version {} ist verfügbar (installiert: {}).",
+                                    rel.version,
+                                    update::current_version()
+                                ))
+                                .strong(),
+                            );
+                            if ui.button("Jetzt aktualisieren").clicked() {
+                                self.updater.install_in_background(rel.clone());
+                            }
+                            ui.hyperlink_to("Versionshinweise", &rel.page_url);
+                        });
+                    }
+                    update::State::Downloading { version, done, total } => {
+                        let frac = if *total > 0 { *done as f32 / *total as f32 } else { 0.0 };
+                        ui.label(format!("Version {version} wird heruntergeladen …"));
+                        ui.add(egui::ProgressBar::new(frac).show_percentage());
+                    }
+                    update::State::Installed(version) => {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new(format!("Version {version} wurde installiert.")).strong().color(GREEN));
+                            if ui.button("Jetzt neu starten").clicked() {
+                                update::RESTART_REQUESTED.store(true, Relaxed);
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            }
+                        });
+                        if self.shared.peer().is_some() {
+                            ui.label(RichText::new("Die aktuelle Verbindung wird beim Neustart kurz unterbrochen.").color(GREY).small());
+                        }
+                    }
+                    update::State::Failed(e) => {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.colored_label(RED, format!("Aktualisierung fehlgeschlagen: {e}"));
+                            ui.hyperlink_to("Download-Seite öffnen", update::RELEASES_URL);
+                        });
+                    }
+                    _ => {}
+                }
+                ui.add_space(4.0);
+            });
+        }
+
+        egui::TopBottomPanel::bottom("footer").show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(format!("IPTalk {}", update::CURRENT_VERSION)).color(GREY));
+                let busy = self.updater.busy();
+                if ui.add_enabled(!busy, egui::Button::new("Nach Updates suchen").small()).clicked() {
+                    self.manual_update_check = true;
+                    self.updater.check_in_background();
+                }
+                match &state {
+                    update::State::Checking => {
+                        ui.spinner();
+                    }
+                    update::State::UpToDate if self.manual_update_check => {
+                        ui.label(RichText::new("Die installierte Version ist aktuell.").color(GREEN).small());
+                    }
+                    update::State::Failed(_) if !self.manual_update_check => {
+                        ui.label(RichText::new("Update-Prüfung nicht möglich").color(GREY).small());
+                    }
+                    _ => {}
+                }
+                ui.checkbox(&mut self.cfg.check_updates, RichText::new("Beim Start prüfen").small());
+            });
+        });
+    }
+
     fn connection_ui(&mut self, ui: &mut egui::Ui, sh: &Arc<Shared>) {
         ui.group(|ui| {
             ui.set_width(ui.available_width());
@@ -170,14 +264,14 @@ impl App {
 
             let (text, color) = match sh.peer() {
                 None => ("Nicht verbunden".to_string(), GREY),
-                Some(_) if sh.is_test() => ("Testmodus: du hörst dich selbst".to_string(), GREEN),
+                Some(_) if sh.is_test() => ("Testmodus: eigene Stimme wird zurückgespielt".to_string(), GREEN),
                 Some(addr) => {
                     let name = sh.peer_name.lock().unwrap().clone();
                     let who = if name.is_empty() { addr.to_string() } else { format!("{name} ({addr})") };
                     if sh.peer_confirmed.load(Relaxed) {
                         (format!("Verbunden mit {who}"), GREEN)
                     } else if sh.seconds_since_heard() > 4.0 {
-                        (format!("Keine Antwort von {who}. Läuft IPTalk dort? Firewall?"), RED)
+                        (format!("Keine Antwort von {who}. Bitte prüfen, ob IPTalk dort läuft und die Firewall UDP-Port {} freigibt.", sh.port), RED)
                     } else {
                         (format!("Verbinde mit {who} …"), YELLOW)
                     }
@@ -189,7 +283,7 @@ impl App {
             });
 
             ui.horizontal(|ui| {
-                ui.label("IP des Kumpels:");
+                ui.label("IP-Adresse der Gegenstelle:");
                 let resp = ui.add(egui::TextEdit::singleline(&mut self.peer_input).hint_text("z. B. 192.168.1.20").desired_width(160.0));
                 let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 if ui.button("Verbinden").clicked() || enter {
@@ -203,7 +297,7 @@ impl App {
 
             let found = sh.discovered.lock().unwrap().clone();
             if !found.is_empty() {
-                ui.label("Im Netzwerk gefunden (anklicken zum Verbinden):");
+                ui.label("Im lokalen Netzwerk gefunden (zum Verbinden anklicken):");
                 for d in found {
                     let label = format!("💻 {}  –  {}", d.name, d.addr);
                     if ui.button(label).clicked() {
@@ -213,15 +307,13 @@ impl App {
                 }
             }
 
+            if ui.button("🎧 Testmodus (eigene Stimme zurückspielen)").clicked() {
+                sh.connect_test();
+                self.message = None;
+            }
+            ui.checkbox(&mut self.cfg.auto_accept, "Eingehende Verbindungen automatisch annehmen");
             ui.horizontal(|ui| {
-                if ui.button("🎧 Testmodus (eigene Stimme hören)").clicked() {
-                    sh.connect_test();
-                    self.message = None;
-                }
-                ui.checkbox(&mut self.cfg.auto_accept, "Anrufe automatisch annehmen");
-            });
-            ui.horizontal(|ui| {
-                ui.label("Dein Name:");
+                ui.label("Anzeigename:");
                 ui.add(egui::TextEdit::singleline(&mut self.cfg.name).desired_width(140.0));
                 ui.label(RichText::new(format!("Port {} (UDP)", sh.port)).color(GREY));
             });
@@ -253,7 +345,7 @@ impl App {
             match self.cfg.mode {
                 TalkMode::Gate => {
                     ui.add(egui::Slider::new(&mut self.cfg.gate_threshold_db, -70.0..=-10.0).suffix(" dB").text("Schwelle"));
-                    ui.label(RichText::new("Gelbe Linie knapp über das Grundrauschen stellen (Lüfter, Tastatur).").color(GREY).small());
+                    ui.label(RichText::new("Schwelle (gelbe Markierung) knapp oberhalb des Grundrauschens einstellen.").color(GREY).small());
                 }
                 TalkMode::PushToTalk => {
                     ui.horizontal(|ui| {
@@ -279,10 +371,10 @@ impl App {
             }
 
             ui.horizontal(|ui| {
-                ui.add(egui::Slider::new(&mut self.cfg.mic_gain_db, -20.0..=30.0).suffix(" dB").text("Mikro-Verstärkung"));
+                ui.add(egui::Slider::new(&mut self.cfg.mic_gain_db, -20.0..=30.0).suffix(" dB").text("Mikrofon-Verstärkung"));
             });
             let mut muted = sh.mic_muted.load(Relaxed);
-            let text = if muted { "🔇 Mikro stumm" } else { "🎤 Mikro an" };
+            let text = if muted { "🔇 Mikrofon stumm" } else { "🎤 Mikrofon aktiv" };
             if ui.toggle_value(&mut muted, text).changed() {
                 sh.mic_muted.store(muted, Relaxed);
             }
@@ -292,11 +384,11 @@ impl App {
     fn listen_ui(&mut self, ui: &mut egui::Ui, sh: &Arc<Shared>) {
         ui.group(|ui| {
             ui.set_width(ui.available_width());
-            ui.heading("Hören");
+            ui.heading("Wiedergabe");
             meter(ui, self.meter_out, None, true);
-            ui.add(egui::Slider::new(&mut self.cfg.out_gain_db, -30.0..=20.0).suffix(" dB").text("Lautstärke Kumpel"));
+            ui.add(egui::Slider::new(&mut self.cfg.out_gain_db, -30.0..=20.0).suffix(" dB").text("Lautstärke Gegenstelle"));
             let mut muted = sh.out_muted.load(Relaxed);
-            let text = if muted { "🔇 Kumpel stumm" } else { "🔊 Kumpel hörbar" };
+            let text = if muted { "🔇 Gegenstelle stumm" } else { "🔊 Gegenstelle hörbar" };
             if ui.toggle_value(&mut muted, text).changed() {
                 sh.out_muted.store(muted, Relaxed);
             }
@@ -311,9 +403,9 @@ impl App {
             let theirs = sh.you_to_me_ms.get();
             egui::Grid::new("lat").num_columns(2).spacing([24.0, 4.0]).show(ui, |ui| {
                 let (a, b) = if sh.is_test() {
-                    ("Deine Stimme bei dir (Schleife)", "")
+                    ("Schleife (Senden + Empfangen)", "")
                 } else {
-                    ("Deine Stimme beim Kumpel", "Kumpels Stimme bei dir")
+                    ("Senderichtung", "Empfangsrichtung")
                 };
                 ui.label(a);
                 ui.label(RichText::new(fmt_ms(mine)).strong().size(18.0).color(if mine.is_nan() { GREY } else { latency_color(mine) }));
@@ -340,7 +432,7 @@ impl App {
                 ui.end_row();
             });
             ui.label(
-                RichText::new("Gemessen von Mikro-Callback bis Kopfhörer-Callback, plus geschätzte Gerätepuffer. Werte erscheinen, sobald gesprochen wird.")
+                RichText::new("Gemessen vom Aufnahme- bis zum Wiedergabe-Callback der Gegenseite, zuzüglich geschätzter Gerätepuffer. Werte erscheinen, sobald Audio übertragen wird.")
                     .color(GREY)
                     .small(),
             );
@@ -385,7 +477,7 @@ impl App {
                     });
                 if cfg!(windows) {
                     ui.checkbox(&mut self.cfg.exclusive_capture, "Mikrofon exklusiv (WASAPI Exclusive)");
-                    ui.checkbox(&mut self.cfg.exclusive_playback, "Kopfhörer exklusiv – Achtung: Spielsound ist dann auf diesem Gerät stumm!");
+                    ui.checkbox(&mut self.cfg.exclusive_playback, "Kopfhörer exklusiv (andere Anwendungen sind auf diesem Gerät dann nicht mehr hörbar)");
                 }
             }
 
@@ -446,7 +538,7 @@ impl App {
                 );
             }
             if cfg!(target_os = "linux") {
-                ui.label(RichText::new("Hinweis: Das PipeWire-Quantum wird beim Programmstart gesetzt. Nach einem Profilwechsel IPTalk neu starten.").color(GREY).small());
+                ui.label(RichText::new("Hinweis: Das PipeWire-Quantum wird beim Programmstart gesetzt. Nach einem Profilwechsel ist ein Neustart von IPTalk erforderlich.").color(GREY).small());
             }
         });
         for e in &self.engine.errors {

@@ -9,6 +9,7 @@ mod jitter;
 mod protocol;
 mod ptt;
 mod ui;
+mod update;
 
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
@@ -30,6 +31,8 @@ Aufruf: iptalk [Optionen]
   --exclusive        Mikrofon exklusiv öffnen (WASAPI Exclusive, Windows)
   --mic-off          beim Selbsttest nichts senden (nur empfangen und messen)
   --list-devices     Audio-Geräte auflisten
+  --update           nach einer neuen Version suchen und sie installieren
+  --version          Versionsnummer anzeigen
   --help             diese Hilfe
 ";
 
@@ -42,11 +45,13 @@ struct Args {
     exclusive: bool,
     mic_off: bool,
     list_devices: bool,
+    update: bool,
+    version: bool,
     help: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut a = Args { port: None, selftest: false, connect: None, seconds: 10, period: None, exclusive: false, mic_off: false, list_devices: false, help: false };
+    let mut a = Args { port: None, selftest: false, connect: None, seconds: 10, period: None, exclusive: false, mic_off: false, list_devices: false, update: false, version: false, help: false };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} braucht einen Wert"));
@@ -59,6 +64,8 @@ fn parse_args() -> Result<Args, String> {
             "--exclusive" => a.exclusive = true,
             "--mic-off" => a.mic_off = true,
             "--list-devices" => a.list_devices = true,
+            "--update" => a.update = true,
+            "--version" | "-V" => a.version = true,
             "--help" | "-h" => a.help = true,
             other => return Err(format!("Unbekannte Option: {other}")),
         }
@@ -84,6 +91,7 @@ fn main() -> eframe::Result<()> {
             std::process::exit(2);
         }
     };
+    update::cleanup_previous();
     let cfg = config::Config::load();
 
     // PipeWire (auch über die JACK-API) liest das gewünschte Quantum aus der Umgebung.
@@ -93,10 +101,14 @@ fn main() -> eframe::Result<()> {
         std::env::set_var("PIPEWIRE_LATENCY", format!("{}/{}", cfg.audio_params().period, audio::SAMPLE_RATE));
     }
 
-    if args.help || args.list_devices || args.selftest {
+    if args.help || args.list_devices || args.selftest || args.update || args.version {
         attach_console();
         if args.help {
             println!("{HELP}");
+        } else if args.version {
+            println!("IPTalk {}", update::CURRENT_VERSION);
+        } else if args.update {
+            std::process::exit(cli_update());
         } else if args.list_devices {
             list_devices();
         } else {
@@ -118,11 +130,18 @@ fn main() -> eframe::Result<()> {
     };
 
     match shared {
-        Ok(shared) => eframe::run_native(
-            "IPTalk",
-            options,
-            Box::new(move |_cc| Ok(Box::new(ui::App::new(cfg, shared)))),
-        ),
+        Ok(shared) => {
+            let result = eframe::run_native(
+                "IPTalk",
+                options,
+                Box::new(move |_cc| Ok(Box::new(ui::App::new(cfg, shared)))),
+            );
+            // Nach einem Update: neue Version starten. Sie wartet, bis dieser Prozess den Port freigibt.
+            if update::RESTART_REQUESTED.load(Relaxed) {
+                update::relaunch();
+            }
+            result
+        }
         Err(e) => {
             let msg = format!(
                 "Port {port} (UDP) konnte nicht geöffnet werden: {e}\n\n\
@@ -134,6 +153,41 @@ fn main() -> eframe::Result<()> {
                     ui.label(&msg);
                 });
             })
+        }
+    }
+}
+
+fn cli_update() -> i32 {
+    println!("Installierte Version: {}", update::current_version());
+    match update::check() {
+        Ok(None) => {
+            println!("IPTalk ist auf dem neuesten Stand.");
+            0
+        }
+        Ok(Some(rel)) => {
+            println!("Neue Version {} gefunden, wird heruntergeladen …", rel.version);
+            let mut last = 0;
+            let r = update::install(&rel, |done, total| {
+                let pct = if total > 0 { done * 100 / total } else { 0 };
+                if pct >= last + 10 {
+                    last = pct;
+                    println!("  {pct} %");
+                }
+            });
+            match r {
+                Ok(()) => {
+                    println!("Version {} installiert. Beim nächsten Start ist sie aktiv.", rel.version);
+                    0
+                }
+                Err(e) => {
+                    eprintln!("Update fehlgeschlagen: {e}");
+                    1
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Suche nach Updates fehlgeschlagen: {e}");
+            1
         }
     }
 }
@@ -197,7 +251,7 @@ fn selftest(mut cfg: config::Config, args: &Args) -> i32 {
 
     match &args.connect {
         Some(t) => match sh.connect(t) {
-            Ok(a) => println!("Verbinde mit {a} …"),
+            Ok(a) => println!("Verbindungsaufbau zu {a} …"),
             Err(e) => {
                 eprintln!("{e}");
                 return 1;
@@ -205,7 +259,7 @@ fn selftest(mut cfg: config::Config, args: &Args) -> i32 {
         },
         None => {
             sh.connect_test();
-            println!("Testmodus: eigene Stimme über 127.0.0.1:{port}");
+            println!("Testmodus: eigene Stimme wird über 127.0.0.1:{port} zurückgespielt");
         }
     }
 
@@ -248,7 +302,7 @@ fn report(sh: &Arc<engine::Shared>, seconds: u64) {
         std::thread::sleep(Duration::from_secs(1));
         let js = &sh.jitter.stats;
         println!(
-            "[{s:>3}s] verbunden={} {:<16} hin={} ms  zurück={} ms  ping={} ms  puffer={} ms  pegel={:6.1} dB  unterläufe={}",
+            "[{s:>3}s] verbunden={} {:<16} senden={} ms  empfangen={} ms  ping={} ms  puffer={} ms  pegel={:6.1} dB  unterläufe={}",
             if sh.peer_confirmed.load(Relaxed) { "ja  " } else { "nein" },
             sh.peer_name.lock().unwrap().chars().take(16).collect::<String>(),
             fmt(sh.my_to_you_ms.get()),

@@ -128,7 +128,7 @@ pub fn decode_name(payload: &[u8]) -> String {
 pub struct Stats {
     /// Geschätzte Verzögerung des eigenen Kopfhörerpuffers.
     pub playback_device_ms: f32,
-    /// Gemessene Latenz in Richtung „ich → du“ (NaN, falls unbekannt).
+    /// Gemessene Latenz in Senderichtung (eigene Stimme bei der Gegenstelle) (NaN, falls unbekannt).
     pub my_to_you_ms: f32,
 }
 
