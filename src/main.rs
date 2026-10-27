@@ -6,6 +6,7 @@ mod config;
 mod dsp;
 mod engine;
 mod jitter;
+mod netinfo;
 mod protocol;
 mod ptt;
 mod ui;

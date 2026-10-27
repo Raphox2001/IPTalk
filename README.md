@@ -36,10 +36,8 @@ Verzögerungen unter etwa 20 ms werden im Gespräch praktisch nicht mehr wahrgen
    - Windows: `iptalk-windows-x64.exe`
    - Linux: `iptalk-linux-x64`
 2. Starten Sie IPTalk auf **beiden** Rechnern.
-3. Nach wenigen Sekunden erscheint der andere Rechner unter **„Im lokalen Netzwerk gefunden“**. Ein Klick darauf stellt die Verbindung her. Alternativ geben Sie die IP-Adresse der Gegenstelle ein und klicken auf **Verbinden**.
+3. Nach wenigen Sekunden erscheint der andere Rechner unter **„Im lokalen Netzwerk gefunden“**. Ein Klick darauf stellt die Verbindung her. Alternativ geben Sie die IP-Adresse der Gegenstelle ein und klicken auf **Verbinden**. Diese Adresse zeigt IPTalk auf dem anderen Rechner unter **„Eigene IP-Adresse“** an.
 4. Die Gegenstelle nimmt die Verbindung automatisch an.
-
-> Die eigene IP-Adresse ermitteln Sie unter Windows mit `ipconfig` (Zeile „IPv4-Adresse“) und unter Linux mit `hostname -I`.
 
 ---
 
@@ -145,6 +143,7 @@ systemctl status rtkit-daemon
 ## 4. Bedienung
 
 ### Verbindung
+- **Eigene IP-Adresse**: Die Adresse, unter der dieser Rechner im lokalen Netzwerk erreichbar ist. Diese Adresse gibt die Gegenstelle zum Verbinden ein. Über **Kopieren** landet sie in der Zwischenablage. Adressen von VPN-, WSL- und anderen virtuellen Adaptern werden nachrangig unter „Weitere Adressen“ aufgeführt.
 - **IP-Adresse der Gegenstelle** eingeben und auf **Verbinden** klicken, oder einen Eintrag unter **„Im lokalen Netzwerk gefunden“** auswählen.
 - **Eingehende Verbindungen automatisch annehmen**: Ist dies aktiviert, genügt es, wenn eine Seite die Verbindung herstellt.
 - **Testmodus**: Die eigene Stimme durchläuft den vollständigen Netzwerkpfad und wird lokal zurückgespielt. So lassen sich Geräte, Rauschsperre und Pegel ohne Gegenstelle einrichten.

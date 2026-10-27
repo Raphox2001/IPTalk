@@ -2,14 +2,16 @@
 
 use std::sync::atomic::Ordering::*;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText, Sense, Stroke, Vec2};
 
 use crate::audio::Backend;
 use crate::config::{Config, Profile};
 use crate::dsp::{gain_to_db, TalkMode};
+use crate::config::DEFAULT_PORT;
 use crate::engine::{AudioEngine, Shared};
+use crate::netinfo::{self, LocalAddr};
 use crate::update::{self, Updater};
 
 const GREEN: Color32 = Color32::from_rgb(80, 200, 120);
@@ -31,6 +33,9 @@ pub struct App {
     updater: Updater,
     /// Die Update-Suche wurde von Hand gestartet → auch „aktuell“/Fehler deutlich anzeigen.
     manual_update_check: bool,
+    /// Eigene IP-Adressen, die wahrscheinlichste zuerst (alle paar Sekunden aktualisiert).
+    local_addrs: Vec<LocalAddr>,
+    addrs_updated: Instant,
 }
 
 impl App {
@@ -52,6 +57,8 @@ impl App {
             message: None,
             updater,
             manual_update_check: false,
+            local_addrs: netinfo::local_ipv4(),
+            addrs_updated: Instant::now(),
         }
     }
 
@@ -257,6 +264,37 @@ impl App {
         });
     }
 
+    /// Zeigt die eigene IP-Adresse, die die Gegenstelle zum Verbinden eingeben muss.
+    fn own_address_ui(&mut self, ui: &mut egui::Ui, sh: &Arc<Shared>) {
+        if self.addrs_updated.elapsed() > Duration::from_secs(5) {
+            self.local_addrs = netinfo::local_ipv4();
+            self.addrs_updated = Instant::now();
+        }
+        let port_suffix = if sh.port == DEFAULT_PORT { String::new() } else { format!(":{}", sh.port) };
+        let Some(main) = self.local_addrs.first().cloned() else {
+            ui.colored_label(RED, "Keine Netzwerkverbindung gefunden.");
+            return;
+        };
+        ui.horizontal(|ui| {
+            ui.label("Eigene IP-Adresse:");
+            let text = format!("{}{port_suffix}", main.ip);
+            ui.label(RichText::new(&text).strong().monospace().size(16.0))
+                .on_hover_text(format!("Netzwerkadapter: {}", main.interface));
+            if ui.small_button("Kopieren").clicked() {
+                ui.ctx().copy_text(text.clone());
+                self.message = Some((format!("{text} in die Zwischenablage kopiert."), GREY));
+            }
+        });
+        if self.local_addrs.len() > 1 {
+            let others: Vec<String> = self.local_addrs[1..]
+                .iter()
+                .map(|a| format!("{}{port_suffix} ({})", a.ip, a.interface))
+                .collect();
+            ui.label(RichText::new(format!("Weitere Adressen: {}", others.join(", "))).color(GREY).small());
+        }
+        ui.label(RichText::new("Diese Adresse auf der Gegenstelle eingeben, falls sie nicht automatisch gefunden wird.").color(GREY).small());
+    }
+
     fn connection_ui(&mut self, ui: &mut egui::Ui, sh: &Arc<Shared>) {
         ui.group(|ui| {
             ui.set_width(ui.available_width());
@@ -281,6 +319,7 @@ impl App {
                 status_dot(ui, color);
                 ui.label(RichText::new(text).strong());
             });
+            self.own_address_ui(ui, sh);
 
             ui.horizontal(|ui| {
                 ui.label("IP-Adresse der Gegenstelle:");
