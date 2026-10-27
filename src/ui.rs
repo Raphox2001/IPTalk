@@ -2,7 +2,8 @@
 
 use std::sync::atomic::Ordering::*;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::net::SocketAddr;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use eframe::egui::{self, Color32, RichText, Sense, Stroke, Vec2};
 
@@ -36,6 +37,8 @@ pub struct App {
     /// Eigene IP-Adressen, die wahrscheinlichste zuerst (alle paar Sekunden aktualisiert).
     local_addrs: Vec<LocalAddr>,
     addrs_updated: Instant,
+    /// Zuletzt in den Verlauf übernommene Verbindung (Adresse, Name), um nicht jedes Bild zu speichern.
+    recorded_peer: Option<(String, String)>,
 }
 
 impl App {
@@ -59,6 +62,7 @@ impl App {
             manual_update_check: false,
             local_addrs: netinfo::local_ipv4(),
             addrs_updated: Instant::now(),
+            recorded_peer: None,
         }
     }
 
@@ -178,6 +182,7 @@ impl eframe::App for App {
         });
 
         sh.apply_controls(&self.cfg);
+        self.record_recent_peer(&sh);
     }
 }
 
@@ -302,6 +307,72 @@ impl App {
         ui.label(RichText::new("Diese Adresse auf der Gegenstelle eingeben, falls sie nicht automatisch gefunden wird.").color(GREY).small());
     }
 
+    /// Bestätigte Verbindungen in „Zuletzt verbunden“ übernehmen.
+    fn record_recent_peer(&mut self, sh: &Arc<Shared>) {
+        let Some(addr) = sh.peer() else {
+            self.recorded_peer = None;
+            return;
+        };
+        // Lokale Adressen (Testmodus, zweite Instanz auf demselben Rechner) nicht merken.
+        if addr.ip().is_loopback() || !sh.peer_confirmed.load(Relaxed) {
+            return;
+        }
+        let key = (addr.to_string(), sh.peer_name.lock().unwrap().clone());
+        if self.recorded_peer.as_ref() != Some(&key) {
+            self.cfg.remember_peer(&key.1, &key.0, unix_now());
+            self.cfg.save();
+            self.recorded_peer = Some(key);
+        }
+    }
+
+    /// Liste „Zuletzt verbunden“: ein Klick verbindet erneut.
+    fn recent_ui(&mut self, ui: &mut egui::Ui, sh: &Arc<Shared>, found: &[crate::engine::Discovered]) {
+        if self.cfg.recent.is_empty() {
+            return;
+        }
+        ui.add_space(2.0);
+        ui.label("Zuletzt verbunden:");
+        let current = sh.peer().map(|a| a.to_string());
+        let now = unix_now();
+        let mut connect_to = None;
+        let mut forget = None;
+        egui::Grid::new("recent").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
+            for r in &self.cfg.recent {
+                // Online, wenn die Gegenstelle gerade per LAN-Suche gefunden wird (auch unter neuer IP).
+                let online = found.iter().find(|d| matches_recent(r, d)).map(|d| d.addr.to_string());
+                let connected = current.as_deref() == Some(r.address.as_str())
+                    || (online.is_some() && current == online);
+                status_dot(ui, if connected || online.is_some() { GREEN } else { GREY });
+                let title = if r.name.is_empty() { short_addr(&r.address) } else { r.name.clone() };
+                if connected {
+                    ui.label(RichText::new(title).strong());
+                } else if ui
+                    .button(title)
+                    .on_hover_text(if online.is_some() { "Im Netzwerk gefunden. Klicken zum Verbinden." } else { "Klicken zum Verbinden." })
+                    .clicked()
+                {
+                    connect_to = Some(online.clone().unwrap_or_else(|| r.address.clone()));
+                }
+                let addr_now = online.as_deref().unwrap_or(&r.address);
+                let when = if connected { "verbunden".to_string() } else { relative_time(now.saturating_sub(r.last_used)) };
+                ui.label(RichText::new(format!("{}  ·  {when}", short_addr(addr_now))).color(GREY).small());
+                if ui.small_button("×").on_hover_text("Aus der Liste entfernen").clicked() {
+                    forget = Some(r.address.clone());
+                }
+                ui.end_row();
+            }
+        });
+        if let Some(a) = forget {
+            self.cfg.forget_peer(&a);
+            self.cfg.save();
+        }
+        if let Some(target) = connect_to {
+            self.peer_input = short_addr(&target);
+            self.connect(target);
+        }
+        ui.add_space(2.0);
+    }
+
     fn connection_ui(&mut self, ui: &mut egui::Ui, sh: &Arc<Shared>) {
         ui.group(|ui| {
             ui.set_width(ui.available_width());
@@ -318,7 +389,7 @@ impl App {
                     } else if sh.seconds_since_heard() > 4.0 {
                         (format!("Keine Antwort von {who}. Bitte prüfen, ob IPTalk dort läuft und die Firewall UDP-Port {} freigibt.", sh.port), RED)
                     } else {
-                        (format!("Verbinde mit {who} …"), YELLOW)
+                        (format!("Verbindungsaufbau zu {who} …"), YELLOW)
                     }
                 }
             };
@@ -342,10 +413,17 @@ impl App {
             });
 
             let found = sh.discovered.lock().unwrap().clone();
-            if !found.is_empty() {
+            self.recent_ui(ui, sh, &found);
+
+            // Gefundene Rechner, die nicht schon unter „Zuletzt verbunden“ stehen.
+            let new_found: Vec<_> = found
+                .iter()
+                .filter(|d| !self.cfg.recent.iter().any(|r| matches_recent(r, d)))
+                .collect();
+            if !new_found.is_empty() {
                 ui.label("Im lokalen Netzwerk gefunden (zum Verbinden anklicken):");
-                for d in found {
-                    let label = format!("💻 {}  –  {}", d.name, d.addr);
+                for d in new_found {
+                    let label = format!("💻 {}  –  {}", d.name, short_addr(&d.addr.to_string()));
                     if ui.button(label).clicked() {
                         self.peer_input = d.addr.ip().to_string();
                         self.connect(d.addr.to_string());
@@ -593,6 +671,33 @@ impl App {
     }
 }
 
+fn unix_now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// IP-Adresse ohne den Standard-Port („192.168.0.20:47800“ → „192.168.0.20“).
+fn short_addr(addr: &str) -> String {
+    match addr.parse::<SocketAddr>() {
+        Ok(a) if a.port() == DEFAULT_PORT => a.ip().to_string(),
+        _ => addr.to_string(),
+    }
+}
+
+/// Gehört ein per LAN-Suche gefundener Rechner zu diesem Verlaufseintrag?
+fn matches_recent(r: &crate::config::RecentPeer, d: &crate::engine::Discovered) -> bool {
+    d.addr.to_string() == r.address || (!r.name.is_empty() && d.name.eq_ignore_ascii_case(&r.name))
+}
+
+fn relative_time(secs: u64) -> String {
+    match secs {
+        0..=59 => "gerade eben".into(),
+        60..=3599 => format!("vor {} Min.", secs / 60),
+        3600..=86_399 => format!("vor {} Std.", secs / 3600),
+        86_400..=172_799 => "gestern".into(),
+        _ => format!("vor {} Tagen", secs / 86_400),
+    }
+}
+
 fn status_dot(ui: &mut egui::Ui, color: Color32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
     ui.painter().circle_filled(rect.center(), 5.5, color);
@@ -606,4 +711,24 @@ fn device_combo(ui: &mut egui::Ui, label: &str, value: &mut Option<String>, devi
             ui.selectable_value(value, Some(d.clone()), d);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_times() {
+        assert_eq!(relative_time(5), "gerade eben");
+        assert_eq!(relative_time(125), "vor 2 Min.");
+        assert_eq!(relative_time(7200), "vor 2 Std.");
+        assert_eq!(relative_time(90_000), "gestern");
+        assert_eq!(relative_time(3 * 86_400), "vor 3 Tagen");
+    }
+
+    #[test]
+    fn short_addresses() {
+        assert_eq!(short_addr("192.168.0.20:47800"), "192.168.0.20");
+        assert_eq!(short_addr("192.168.0.20:47801"), "192.168.0.20:47801");
+    }
 }

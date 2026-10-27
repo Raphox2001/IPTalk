@@ -1,6 +1,6 @@
 [package]
 name = "iptalk"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 description = "Sprachverbindung mit minimaler Latenz, direkt von IP zu IP"
 license = "MIT"

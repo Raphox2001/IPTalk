@@ -155,6 +155,7 @@ systemctl status rtkit-daemon
 
 ### Verbindung
 - **Eigene IP-Adresse**: Die Adresse, unter der dieser Rechner im lokalen Netzwerk erreichbar ist. Diese Adresse gibt die Gegenstelle zum Verbinden ein. Über **Kopieren** landet sie in der Zwischenablage. Adressen von VPN-, WSL- und anderen virtuellen Adaptern werden nachrangig unter „Weitere Adressen“ aufgeführt.
+- **Zuletzt verbunden**: Die letzten fünf Gegenstellen mit Name, Adresse und Zeitpunkt. Ein Klick auf den Namen stellt die Verbindung erneut her, **×** entfernt einen Eintrag. Ein grüner Punkt zeigt an, dass die Gegenstelle gerade im Netzwerk gefunden wird. Hat sie inzwischen eine andere IP-Adresse erhalten (z. B. vom Router), wird sie am Namen erkannt und unter der neuen Adresse verbunden.
 - **IP-Adresse der Gegenstelle** eingeben und auf **Verbinden** klicken, oder einen Eintrag unter **„Im lokalen Netzwerk gefunden“** auswählen.
 - **Eingehende Verbindungen automatisch annehmen**: Ist dies aktiviert, genügt es, wenn eine Seite die Verbindung herstellt.
 - **Testmodus**: Die eigene Stimme durchläuft den vollständigen Netzwerkpfad und wird lokal zurückgespielt. So lassen sich Geräte, Rauschsperre und Pegel ohne Gegenstelle einrichten.
@@ -244,7 +245,7 @@ iptalk --selftest --connect 192.168.1.20 --seconds 30
 ```
 Führt denselben Test gegen eine Gegenstelle aus, auf der IPTalk laufen muss.
 
-Alle Optionen zeigt `iptalk --help`.
+Alle Optionen zeigt `iptalk --help`. Mit der Umgebungsvariablen `IPTALK_CONFIG` lässt sich für Tests eine andere Konfigurationsdatei verwenden.
 
 ---
 

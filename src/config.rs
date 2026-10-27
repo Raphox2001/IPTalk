@@ -36,6 +36,20 @@ pub struct PttKey {
     pub label: String,
 }
 
+/// Eine Gegenstelle, mit der schon einmal eine Verbindung bestand.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecentPeer {
+    /// Anzeigename der Gegenstelle (kann leer sein).
+    pub name: String,
+    /// IPv4-Adresse mit Port, z. B. „192.168.0.20:47800“.
+    pub address: String,
+    /// Zeitpunkt der letzten Verbindung (Sekunden seit 1970).
+    pub last_used: u64,
+}
+
+/// So viele Einträge merkt sich IPTalk unter „Zuletzt verbunden“.
+pub const MAX_RECENT: usize = 5;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -62,6 +76,9 @@ pub struct Config {
 
     /// Beim Start nach einer neuen Version suchen.
     pub check_updates: bool,
+
+    /// Zuletzt verbundene Gegenstellen, neueste zuerst.
+    pub recent: Vec<RecentPeer>,
 }
 
 impl Default for Config {
@@ -86,6 +103,7 @@ impl Default for Config {
             out_gain_db: 0.0,
             ptt_key: None,
             check_updates: true,
+            recent: Vec::new(),
         }
     }
 }
@@ -98,6 +116,20 @@ pub struct AudioParams {
 }
 
 impl Config {
+    /// Merkt sich eine Verbindung. Ein bestehender Eintrag mit gleicher Adresse oder
+    /// gleichem Namen (IP kann sich per DHCP ändern) wird aktualisiert und nach vorne geholt.
+    pub fn remember_peer(&mut self, name: &str, address: &str, now: u64) {
+        let name = name.trim();
+        self.recent
+            .retain(|r| r.address != address && (name.is_empty() || !r.name.eq_ignore_ascii_case(name)));
+        self.recent.insert(0, RecentPeer { name: name.to_string(), address: address.to_string(), last_used: now });
+        self.recent.truncate(MAX_RECENT);
+    }
+
+    pub fn forget_peer(&mut self, address: &str) {
+        self.recent.retain(|r| r.address != address);
+    }
+
     pub fn audio_params(&self) -> AudioParams {
         match self.profile {
             // Geteilter Low-Latency-Modus (WASAPI IAudioClient3 bzw. kleines PipeWire-Quantum).
@@ -113,6 +145,10 @@ impl Config {
     }
 
     fn path() -> Option<PathBuf> {
+        // Für Tests: andere Konfigurationsdatei verwenden, ohne die echte anzufassen.
+        if let Some(p) = std::env::var_os("IPTALK_CONFIG") {
+            return Some(PathBuf::from(p));
+        }
         let dir = dirs::config_dir()?;
         Some(if cfg!(windows) { dir.join("IPTalk") } else { dir.join("iptalk") }.join("config.toml"))
     }
@@ -143,4 +179,43 @@ fn default_name() -> String {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     host.unwrap_or_else(|| "IPTalk".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remember_moves_to_front_and_limits() {
+        let mut c = Config::default();
+        for i in 0..7 {
+            c.remember_peer(&format!("PC{i}"), &format!("192.168.0.{i}:47800"), i);
+        }
+        assert_eq!(c.recent.len(), MAX_RECENT);
+        assert_eq!(c.recent[0].name, "PC6");
+        c.remember_peer("PC3", "192.168.0.3:47800", 100);
+        assert_eq!(c.recent[0].name, "PC3");
+        assert_eq!(c.recent.iter().filter(|r| r.name == "PC3").count(), 1);
+    }
+
+    #[test]
+    fn same_name_new_ip_replaces_entry() {
+        let mut c = Config::default();
+        c.remember_peer("Linux-PC", "192.168.0.20:47800", 1);
+        c.remember_peer("linux-pc", "192.168.0.35:47800", 2);
+        assert_eq!(c.recent.len(), 1);
+        assert_eq!(c.recent[0].address, "192.168.0.35:47800");
+    }
+
+    #[test]
+    fn toml_roundtrip_with_tables() {
+        let mut c = Config::default();
+        c.ptt_key = Some(PttKey { code: 5, label: "Maustaste 4".into() });
+        c.remember_peer("Linux-PC", "192.168.0.20:47800", 42);
+        let s = toml::to_string_pretty(&c).unwrap();
+        let back: Config = toml::from_str(&s).unwrap();
+        assert_eq!(back.recent, c.recent);
+        assert_eq!(back.ptt_key, c.ptt_key);
+        assert!(back.check_updates);
+    }
 }
