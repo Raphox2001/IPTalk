@@ -15,10 +15,11 @@ pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const REPO: &str = "Raphox2001/IPTalk";
 pub const RELEASES_URL: &str = "https://github.com/Raphox2001/IPTalk/releases";
 
+/// Dateinamen im Release, bevorzugter Name zuerst (der zweite ist der Name bis v0.2.1).
 #[cfg(windows)]
-const ASSET_NAME: &str = "iptalk-windows-x64.exe";
+const ASSET_NAMES: &[&str] = &["IPTalk.exe", "iptalk-windows-x64.exe"];
 #[cfg(not(windows))]
-const ASSET_NAME: &str = "iptalk-linux-x64";
+const ASSET_NAMES: &[&str] = &["IPTalk-Linux", "iptalk-linux-x64"];
 
 /// Wird gesetzt, wenn nach dem Schließen des Fensters die neue Version gestartet werden soll.
 pub static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -111,11 +112,10 @@ pub fn check() -> Result<Option<Release>, String> {
     if rel.draft || rel.prerelease || !is_newer(&rel.tag_name, &current_version()) {
         return Ok(None);
     }
-    let asset = rel
-        .assets
+    let asset = ASSET_NAMES
         .iter()
-        .find(|a| a.name == ASSET_NAME)
-        .ok_or_else(|| format!("Version {} enthält keine Datei für dieses System ({ASSET_NAME}).", rel.tag_name))?;
+        .find_map(|n| rel.assets.iter().find(|a| a.name == *n))
+        .ok_or_else(|| format!("Version {} enthält keine Datei für dieses System ({}).", rel.tag_name, ASSET_NAMES[0]))?;
     Ok(Some(Release {
         version: rel.tag_name.trim_start_matches(['v', 'V']).to_string(),
         page_url: rel.html_url,

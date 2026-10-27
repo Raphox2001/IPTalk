@@ -1,6 +1,7 @@
 fn main() {
     println!("cargo:rerun-if-changed=native/ma_shim.c");
     println!("cargo:rerun-if-changed=native/miniaudio.h");
+    println!("cargo:rerun-if-changed=assets/iptalk.ico");
 
     let mut build = cc::Build::new();
     build
@@ -25,4 +26,20 @@ fn main() {
         println!("cargo:rustc-link-lib=m");
     }
     build.compile("ma_shim");
+
+    // Windows: Icon und Versionsinformationen (Explorer, Task-Manager, Eigenschaften).
+    #[cfg(windows)]
+    if target_os == "windows" {
+        let mut res = winresource::WindowsResource::new();
+        res.set_icon("assets/iptalk.ico")
+            .set("ProductName", "IPTalk")
+            .set("FileDescription", "IPTalk – Sprachverbindung mit minimaler Latenz")
+            .set("CompanyName", "Raphox2001")
+            .set("LegalCopyright", "© 2026 Raphox2001, MIT-Lizenz")
+            .set("OriginalFilename", "IPTalk.exe")
+            .set("InternalName", "IPTalk");
+        if let Err(e) = res.compile() {
+            println!("cargo:warning=Windows-Ressourcen konnten nicht eingebunden werden: {e}");
+        }
+    }
 }

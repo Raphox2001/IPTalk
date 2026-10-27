@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/iptalk.png" width="128" alt="IPTalk-Icon"></p>
+
 # IPTalk
 
 **Sprachverbindung mit minimaler Latenz – direkt von Rechner zu Rechner im lokalen Netzwerk.**
@@ -33,8 +35,10 @@ Verzögerungen unter etwa 20 ms werden im Gespräch praktisch nicht mehr wahrgen
 ## 1. Schnellstart
 
 1. Laden Sie unter **[Releases](https://github.com/Raphox2001/IPTalk/releases/latest)** die passende Datei herunter:
-   - Windows: `iptalk-windows-x64.exe`
-   - Linux: `iptalk-linux-x64`
+   - Windows: `IPTalk.exe`
+   - Linux: `IPTalk-Linux`
+
+   Die zusätzlich aufgeführten Dateien `iptalk-windows-x64.exe` und `iptalk-linux-x64` sind identisch und dienen nur der automatischen Aktualisierung älterer Versionen.
 2. Starten Sie IPTalk auf **beiden** Rechnern.
 3. Nach wenigen Sekunden erscheint der andere Rechner unter **„Im lokalen Netzwerk gefunden“**. Ein Klick darauf stellt die Verbindung her. Alternativ geben Sie die IP-Adresse der Gegenstelle ein und klicken auf **Verbinden**. Diese Adresse zeigt IPTalk auf dem anderen Rechner unter **„Eigene IP-Adresse“** an.
 4. Die Gegenstelle nimmt die Verbindung automatisch an.
@@ -44,7 +48,7 @@ Verzögerungen unter etwa 20 ms werden im Gespräch praktisch nicht mehr wahrgen
 ## 2. Windows
 
 ### Start
-Starten Sie `iptalk-windows-x64.exe` per Doppelklick. Eine Installation ist nicht erforderlich. Die Einstellungen werden in `%APPDATA%\IPTalk\config.toml` gespeichert.
+Legen Sie `IPTalk.exe` in einen Ordner Ihrer Wahl (z. B. `Dokumente\IPTalk`) und starten Sie die Datei per Doppelklick. Eine Installation ist nicht erforderlich. Die Einstellungen werden in `%APPDATA%\IPTalk\config.toml` gespeichert.
 
 > Beim ersten Start zeigt Windows SmartScreen unter Umständen den Hinweis „Der Computer wurde durch Windows geschützt“. Wählen Sie dann **Weitere Informationen → Trotzdem ausführen**. Der Hinweis erscheint, weil die Datei nicht digital signiert ist.
 
@@ -69,18 +73,25 @@ IPTalk arbeitet intern mit 48 kHz. Ist ein Gerät in Windows auf 44,1 kHz einges
 IPTalk wird als einzelne ausführbare Datei ausgeliefert. Die Audiosysteme PulseAudio, PipeWire, JACK und ALSA werden erst zur Laufzeit geladen.
 
 ### Start
+Legen Sie die Datei in einen dauerhaften Ordner, machen Sie sie ausführbar und starten Sie sie:
 ```bash
-chmod +x iptalk-linux-x64
+mkdir -p ~/Programme && mv ~/Downloads/IPTalk-Linux ~/Programme/
 ```
 ```bash
-./iptalk-linux-x64
+chmod +x ~/Programme/IPTalk-Linux
+```
+```bash
+~/Programme/IPTalk-Linux
 ```
 
-Optional für alle Benutzer installieren:
+### Eintrag im Startmenü
+Damit IPTalk mit Icon im Anwendungsmenü erscheint, klicken Sie in der Fußzeile des Fensters auf **„Ins Startmenü aufnehmen“**, oder führen Sie diesen Befehl aus:
 ```bash
-sudo install -m 755 iptalk-linux-x64 /usr/local/bin/iptalk
+~/Programme/IPTalk-Linux --install-desktop
 ```
-Bei einer systemweiten Installation kann IPTalk sich nicht selbst aktualisieren (siehe [Updates](#5-updates)).
+Der Eintrag wird nur für den aktuellen Benutzer angelegt (`~/.local/share/applications/iptalk.desktop`) und verweist auf den aktuellen Speicherort der Datei. Wird die Datei verschoben, muss der Eintrag neu angelegt werden.
+
+Eine systemweite Installation (z. B. nach `/usr/local/bin`) ist möglich. Dann kann sich IPTalk jedoch nicht selbst aktualisieren (siehe [Updates](#5-updates)).
 
 Die Einstellungen werden in `~/.config/iptalk/config.toml` gespeichert.
 
@@ -302,6 +313,9 @@ src/dsp.rs           Verstärkung, Rauschsperre, Push-to-Talk-Logik
 src/engine.rs        Netzwerk-Threads, Verbindungsaufbau, Audiogeräte
 src/ptt.rs           globale Push-to-Talk-Taste (Windows: GetAsyncKeyState, Linux: evdev)
 src/update.rs        Aktualisierung über GitHub-Releases
+src/netinfo.rs       Ermittlung der eigenen IP-Adressen
+src/desktop.rs       Fenster-Icon, Startmenü-Eintrag unter Linux
+assets/              Icon (make_icon.py erzeugt iptalk.ico/.png)
 src/ui.rs            Benutzeroberfläche (egui)
 src/main.rs          Start, Kommandozeilenoptionen, Selbsttest
 ```

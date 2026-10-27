@@ -260,6 +260,13 @@ impl App {
                     _ => {}
                 }
                 ui.checkbox(&mut self.cfg.check_updates, RichText::new("Beim Start prüfen").small());
+                #[cfg(target_os = "linux")]
+                if !crate::desktop::desktop_entry_exists() && ui.small_button("Ins Startmenü aufnehmen").clicked() {
+                    self.message = Some(match crate::desktop::install_desktop_entry() {
+                        Ok(_) => ("IPTalk wurde ins Startmenü aufgenommen.".into(), GREEN),
+                        Err(e) => (format!("Startmenü-Eintrag fehlgeschlagen: {e}"), RED),
+                    });
+                }
             });
         });
     }

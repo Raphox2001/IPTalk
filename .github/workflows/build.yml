@@ -18,11 +18,14 @@ jobs:
         include:
           - os: windows-latest
             bin: target/release/iptalk.exe
-            artifact: iptalk-windows-x64.exe
+            artifact: IPTalk.exe
+            # Alter Name, damit Version 0.2.x das Update noch findet.
+            legacy: iptalk-windows-x64.exe
           # Ältere glibc → das Binary läuft auch auf älteren Distributionen.
           - os: ubuntu-22.04
             bin: target/release/iptalk
-            artifact: iptalk-linux-x64
+            artifact: IPTalk-Linux
+            legacy: iptalk-linux-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -37,10 +40,11 @@ jobs:
         run: |
           mkdir dist
           cp "${{ matrix.bin }}" "dist/${{ matrix.artifact }}"
+          cp "${{ matrix.bin }}" "dist/${{ matrix.legacy }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}
+          path: dist/*
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -55,3 +59,6 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          body: |
+            **Download:** `IPTalk.exe` (Windows) bzw. `IPTalk-Linux` (Linux).
+            Die Dateien `iptalk-windows-x64.exe` und `iptalk-linux-x64` sind identisch und dienen nur der automatischen Aktualisierung älterer Versionen.

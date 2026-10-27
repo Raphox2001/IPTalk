@@ -3,6 +3,7 @@
 
 mod audio;
 mod config;
+mod desktop;
 mod dsp;
 mod engine;
 mod jitter;
@@ -34,6 +35,7 @@ Aufruf: iptalk [Optionen]
   --list-devices     Audio-Geräte auflisten
   --update           nach einer neuen Version suchen und sie installieren
   --version          Versionsnummer anzeigen
+  --install-desktop  Startmenü-Eintrag mit Icon anlegen (Linux)
   --help             diese Hilfe
 ";
 
@@ -48,11 +50,12 @@ struct Args {
     list_devices: bool,
     update: bool,
     version: bool,
+    install_desktop: bool,
     help: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut a = Args { port: None, selftest: false, connect: None, seconds: 10, period: None, exclusive: false, mic_off: false, list_devices: false, update: false, version: false, help: false };
+    let mut a = Args { port: None, selftest: false, connect: None, seconds: 10, period: None, exclusive: false, mic_off: false, list_devices: false, update: false, version: false, install_desktop: false, help: false };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} braucht einen Wert"));
@@ -67,6 +70,7 @@ fn parse_args() -> Result<Args, String> {
             "--list-devices" => a.list_devices = true,
             "--update" => a.update = true,
             "--version" | "-V" => a.version = true,
+            "--install-desktop" => a.install_desktop = true,
             "--help" | "-h" => a.help = true,
             other => return Err(format!("Unbekannte Option: {other}")),
         }
@@ -102,10 +106,21 @@ fn main() -> eframe::Result<()> {
         std::env::set_var("PIPEWIRE_LATENCY", format!("{}/{}", cfg.audio_params().period, audio::SAMPLE_RATE));
     }
 
-    if args.help || args.list_devices || args.selftest || args.update || args.version {
+    if args.help || args.list_devices || args.selftest || args.update || args.version || args.install_desktop {
         attach_console();
         if args.help {
             println!("{HELP}");
+        } else if args.install_desktop {
+            #[cfg(target_os = "linux")]
+            match desktop::install_desktop_entry() {
+                Ok(p) => println!("Startmenü-Eintrag angelegt: {}", p.display()),
+                Err(e) => {
+                    eprintln!("Startmenü-Eintrag konnte nicht angelegt werden: {e}");
+                    std::process::exit(1);
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            println!("--install-desktop wird nur unter Linux benötigt.");
         } else if args.version {
             println!("IPTalk {}", update::CURRENT_VERSION);
         } else if args.update {
@@ -126,7 +141,9 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title("IPTalk")
             .with_inner_size([500.0, 780.0])
-            .with_min_inner_size([420.0, 400.0]),
+            .with_min_inner_size([420.0, 400.0])
+            .with_icon(desktop::window_icon())
+            .with_app_id(desktop::APP_ID),
         ..Default::default()
     };
 
